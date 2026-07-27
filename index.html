@@ -32,8 +32,13 @@
         </article>
       </section>
 
-      <section class="table-card">
-        <table>
+      <section class="toolbar">
+        <button class="view-btn active" data-view="movements">Mostrar movimentações</button>
+        <button class="view-btn" data-view="summary">Mostrar resumo por ativo</button>
+      </section>
+
+      <section class="table-card" id="tableContainer">
+        <table id="movementsTable">
           <thead>
             <tr>
               <th>Ativo</th>
@@ -46,6 +51,20 @@
           <tbody id="movementsBody">
             <tr>
               <td colspan="5">Carregando...</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <table id="summaryTable" hidden>
+          <thead>
+            <tr>
+              <th>Ativo</th>
+              <th>Quantidade total</th>
+            </tr>
+          </thead>
+          <tbody id="summaryBody">
+            <tr>
+              <td colspan="2">Carregando...</td>
             </tr>
           </tbody>
         </table>
