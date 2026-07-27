@@ -1,20 +1,24 @@
 const state = {
   movements: [],
   lastContent: '',
+  quotes: new Map(),
+  isLoading: false,
 };
 
 const FILE_VERSIONS = {
-  'index.html': '2026.07.27.1',
-  'styles.css': '2026.07.27.1',
-  'app.js': '2026.07.27.1',
-  'Movimentacoes.csv': '2026.07.27.1',
+  'index.html': '2026.07.27.2',
+  'styles.css': '2026.07.27.2',
+  'app.js': '2026.07.27.2',
+  'Movimentacoes.csv': '2026.07.27.2',
 };
 
 const SHEET_URLS = [
   'https://docs.google.com/spreadsheets/d/16W7sG6d_QUrYneuxVdh39DDwoTInAQi0qCuAaEMBShA/export?format=csv&gid=1908759892',
-  'https://docs.google.com/spreadsheets/d/16W7sG6d_QUrYneuxVdh39DDwoTInAQi0qCuAaEMBShA/export?format=csv',
   'https://docs.google.com/spreadsheets/d/16W7sG6d_QUrYneuxVdh39DDwoTInAQi0qCuAaEMBShA/gviz/tq?tqx=out:csv&gid=1908759892',
 ];
+
+const QUOTES_URL =
+  'https://docs.google.com/spreadsheets/d/16W7sG6d_QUrYneuxVdh39DDwoTInAQi0qCuAaEMBShA/export?format=csv';
 
 const FALLBACK_URL = './Movimentacoes.csv';
 
@@ -155,57 +159,47 @@ function renderTable(rows) {
     .join('');
 }
 
-function getQuote(symbol) {
-  const normalizedSymbol = String(symbol || '').trim().toUpperCase();
-  if (!normalizedSymbol) return Promise.resolve(null);
+function parseQuotes(text) {
+  const quotes = new Map();
+  const lines = text
+    .replace(/\r/g, '')
+    .split('\n')
+    .filter((line) => line.trim());
 
-  const query = normalizedSymbol.replace(/\.SA$/, '').replace(/[^A-Z0-9]/g, '');
-  const candidates = [query, `${query}.SA`, `BVMF:${query}`, `${query}:BVMF`];
+  if (lines.length < 2) return quotes;
 
-  return new Promise((resolve) => {
-    let finished = false;
-    const timeoutId = setTimeout(() => {
-      if (!finished) {
-        finished = true;
-        resolve(null);
-      }
-    }, 5000);
+  lines.slice(1).forEach((line) => {
+    const values = splitDelimitedLine(line, ',');
+    const symbol = String(values[0] || '').trim().toUpperCase();
+    if (!symbol) return;
 
-    Promise.all(
-      candidates.map((candidate) => {
-        const formula = `=GOOGLEFINANCE("${candidate}";"price")`;
-        return fetch(`https://script.google.com/macros/s/AKfycbw5Xx8b4bI6yU0cJkQJ3mNtmVZ-PxX4Y8M0YQx2tEjL3nD4N1g7mQ7gD2M4U1/exec?formula=${encodeURIComponent(formula)}`)
-          .then((response) => {
-            if (!response.ok) return null;
-            return response.text();
-          })
-          .then((text) => {
-            const cleaned = String(text || '').trim();
-            const number = Number(cleaned.replace(',', '.').replace(/[^0-9.-]/g, ''));
-            return Number.isFinite(number) ? number : null;
-          })
-          .catch(() => null);
-      }),
-    )
-      .then((values) => {
-        const quote = values.find((value) => value != null) ?? null;
-        if (!finished) {
-          finished = true;
-          clearTimeout(timeoutId);
-          resolve(quote);
-        }
-      })
-      .catch(() => {
-        if (!finished) {
-          finished = true;
-          clearTimeout(timeoutId);
-          resolve(null);
-        }
-      });
+    const quote = parseCurrency(values[1]);
+    if (quote) {
+      quotes.set(symbol, quote);
+    }
   });
+
+  return quotes;
 }
 
-async function renderSummaryByAsset(rows) {
+async function loadQuotes() {
+  try {
+    const response = await fetch(`${QUOTES_URL}&ts=${Date.now()}`, {
+      cache: 'no-store',
+    });
+
+    if (!response.ok) return;
+
+    const text = await response.text();
+    if (!text || text.includes('<!DOCTYPE') || text.includes('<html')) return;
+
+    state.quotes = parseQuotes(text);
+  } catch (error) {
+    // mantém as últimas cotações carregadas em caso de falha
+  }
+}
+
+function renderSummaryByAsset(rows) {
   const summary = new Map();
 
   rows.forEach((row) => {
@@ -235,9 +229,9 @@ async function renderSummaryByAsset(rows) {
     return;
   }
 
-  const rowsHtml = await Promise.all(
-    entries.map(async ([ativo, quantidade]) => {
-      const quote = await getQuote(ativo);
+  tbody.innerHTML = entries
+    .map(([ativo, quantidade]) => {
+      const quote = state.quotes.get(String(ativo).trim().toUpperCase());
       const formattedQuote = quote != null ? formatCurrency(quote) : 'Sem cotação';
       const formattedValue = quote != null ? formatCurrency(quote * quantidade) : 'Sem cotação';
 
@@ -249,10 +243,8 @@ async function renderSummaryByAsset(rows) {
           <td>${formattedValue}</td>
         </tr>
       `;
-    }),
-  );
-
-  tbody.innerHTML = rowsHtml.join('');
+    })
+    .join('');
 }
 
 function switchView(view) {
@@ -287,48 +279,57 @@ function getErrorMessage(error) {
 }
 
 async function loadMovements() {
-  const sources = [...SHEET_URLS, FALLBACK_URL];
+  if (state.isLoading) return;
+  state.isLoading = true;
 
-  for (const source of sources) {
-    try {
-      const response = await fetch(`${source}?ts=${Date.now()}`, {
-        cache: 'no-store',
-      });
+  try {
+    await loadQuotes();
 
-      if (!response.ok) {
-        continue;
-      }
+    const sources = [...SHEET_URLS, FALLBACK_URL];
 
-      const text = await response.text();
+    for (const source of sources) {
+      try {
+        const response = await fetch(`${source}${source.includes('?') ? '&' : '?'}ts=${Date.now()}`, {
+          cache: 'no-store',
+        });
 
-      if (!text || text.includes('<!DOCTYPE') || text.includes('<html')) {
-        continue;
-      }
+        if (!response.ok) {
+          continue;
+        }
 
-      if (text === state.lastContent) {
+        const text = await response.text();
+
+        if (!text || text.includes('<!DOCTYPE') || text.includes('<html')) {
+          continue;
+        }
+
+        const movements = parseCsv(text);
+        state.movements = movements;
+        renderSummary(movements);
+        renderTable(movements);
+        renderSummaryByAsset(movements);
+
+        if (text !== state.lastContent) {
+          state.lastContent = text;
+        }
+
+        setLastUpdated();
         return;
+      } catch (error) {
+        continue;
       }
-
-      state.lastContent = text;
-      const movements = parseCsv(text);
-      state.movements = movements;
-      renderSummary(movements);
-      renderTable(movements);
-      renderSummaryByAsset(movements);
-      setLastUpdated();
-      return;
-    } catch (error) {
-      continue;
     }
-  }
 
-  const tbody = document.querySelector('#movementsBody');
-  if (tbody && tbody.innerHTML.includes('Carregando')) {
-    tbody.innerHTML = `
-      <tr>
-        <td colspan="5">Não foi possível carregar os dados da planilha. Verifique se a planilha está compartilhada publicamente para visualização.</td>
-      </tr>
-    `;
+    const tbody = document.querySelector('#movementsBody');
+    if (tbody && tbody.innerHTML.includes('Carregando')) {
+      tbody.innerHTML = `
+        <tr>
+          <td colspan="5">Não foi possível carregar os dados da planilha. Verifique se a planilha está compartilhada publicamente para visualização.</td>
+        </tr>
+      `;
+    }
+  } finally {
+    state.isLoading = false;
   }
 }
 
