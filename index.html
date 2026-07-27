@@ -3,15 +3,55 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Minha Página no GitHub Pages</title>
-    <meta name="description" content="Uma página simples publicada com GitHub Pages" />
+    <title>Carteira de Investimentos</title>
+    <meta name="description" content="Painel para acompanhar movimentações de ativos" />
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
-    <main class="container">
-      <h1>Olá, mundo!</h1>
-      <p>Esta página foi criada para testar o GitHub Pages.</p>
-      <a href="https://github.com" target="_blank" rel="noopener">Abrir GitHub</a>
+    <main class="dashboard">
+      <header class="header">
+        <div>
+          <p class="eyebrow">Acompanhamento</p>
+          <h1>Movimentações da carteira</h1>
+        </div>
+        <p class="status" id="lastUpdated">Aguardando dados...</p>
+      </header>
+
+      <section class="summary">
+        <article class="card">
+          <span>Total investido</span>
+          <strong id="totalInvestido">R$ 0,00</strong>
+        </article>
+        <article class="card">
+          <span>Movimentações</span>
+          <strong id="quantidadeAtivos">0</strong>
+        </article>
+        <article class="card">
+          <span>Ativos distintos</span>
+          <strong id="ativosUnicos">0</strong>
+        </article>
+      </section>
+
+      <section class="table-card">
+        <table>
+          <thead>
+            <tr>
+              <th>Ativo</th>
+              <th>Movimentação</th>
+              <th>Data</th>
+              <th>Quantidade</th>
+              <th>Valor total</th>
+            </tr>
+          </thead>
+          <tbody id="movementsBody">
+            <tr>
+              <td colspan="5">Carregando...</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
     </main>
+
+    <script src="app.js"></script>
   </body>
 </html>
