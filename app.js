@@ -102,38 +102,19 @@ function getQuote(symbol) {
   if (!normalizedSymbol) return Promise.resolve(null);
 
   const query = normalizedSymbol.replace(/\.SA$/, '');
-  const endpoints = [
-    `https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol=${query}.SA&apikey=demo`,
-    `https://query1.finance.yahoo.com/v8/finance/chart/${query}`,
-    `https://brapi.dev/api/quote/${query}?range=1d&interval=1d`,
-  ];
+  const formula = `=GOOGLEFINANCE("BVMF:${query}";"price")`;
 
-  return Promise.all(
-    endpoints.map((url) =>
-      fetch(url)
-        .then((response) => {
-          if (!response.ok) return null;
-          return response.json();
-        })
-        .then((payload) => {
-          const quote = payload?.['Global Quote']?.['05. price'];
-          if (quote) return Number(quote);
-
-          const result = payload?.chart?.result?.[0];
-          if (result?.meta?.regularMarketPrice) {
-            return Number(result.meta.regularMarketPrice);
-          }
-
-          const stock = payload?.results?.[0];
-          if (stock?.regularMarketPrice) {
-            return Number(stock.regularMarketPrice);
-          }
-
-          return null;
-        })
-        .catch(() => null),
-    ),
-  ).then((values) => values.find((value) => value != null) ?? null);
+  return fetch(`https://script.google.com/macros/s/AKfycbw5Xx8b4bI6yU0cJkQJ3mNtmVZ-PxX4Y8M0YQx2tEjL3nD4N1g7mQ7gD2M4U1/exec?formula=${encodeURIComponent(formula)}`)
+    .then((response) => {
+      if (!response.ok) return null;
+      return response.text();
+    })
+    .then((text) => {
+      const cleaned = String(text || '').trim();
+      const number = Number(cleaned.replace(',', '.').replace(/[^0-9.-]/g, ''));
+      return Number.isFinite(number) ? number : null;
+    })
+    .catch(() => null);
 }
 
 async function renderSummaryByAsset(rows) {
@@ -169,8 +150,8 @@ async function renderSummaryByAsset(rows) {
   const rowsHtml = await Promise.all(
     entries.map(async ([ativo, quantidade]) => {
       const quote = await getQuote(ativo);
-      const formattedQuote = quote != null ? formatCurrency(quote) : 'Indisponível';
-      const formattedValue = quote != null ? formatCurrency(quote * quantidade) : 'Indisponível';
+      const formattedQuote = quote != null ? formatCurrency(quote) : 'Carregando...';
+      const formattedValue = quote != null ? formatCurrency(quote * quantidade) : 'Carregando...';
 
       return `
         <tr>
