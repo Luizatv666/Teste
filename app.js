@@ -8,7 +8,7 @@ const state = {
 const FILE_VERSIONS = {
   'index.html': '2026.07.27.3',
   'styles.css': '2026.07.27.3',
-  'app.js': '2026.07.27.5',
+  'app.js': '2026.07.27.6',
   'Movimentacoes.csv': '2026.07.27.2',
 };
 
@@ -178,9 +178,13 @@ function parseQuotes(text) {
 }
 
 async function loadQuotes() {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 5000);
+
   try {
     const response = await fetch(`${QUOTES_URL}&ts=${Date.now()}`, {
       cache: 'no-store',
+      signal: controller.signal,
     });
 
     if (!response.ok) return;
@@ -190,7 +194,9 @@ async function loadQuotes() {
 
     state.quotes = parseQuotes(text);
   } catch (error) {
-    // mantém as últimas cotações carregadas em caso de falha
+    // mantém as últimas cotações carregadas em caso de falha ou tempo esgotado
+  } finally {
+    clearTimeout(timeoutId);
   }
 }
 
@@ -344,9 +350,13 @@ async function loadMovements() {
   if (state.isLoading) return;
   state.isLoading = true;
 
-  try {
-    await loadQuotes();
+  const quotesPromise = loadQuotes().then(() => {
+    if (state.movements.length) {
+      renderSummaryByAsset(state.movements);
+    }
+  });
 
+  try {
     const response = await fetch(`${MOVEMENTS_URL}?ts=${Date.now()}`, {
       cache: 'no-store',
     });
@@ -381,6 +391,7 @@ async function loadMovements() {
       `;
     }
   } finally {
+    await quotesPromise;
     state.isLoading = false;
   }
 }
