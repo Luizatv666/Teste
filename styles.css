@@ -46,6 +46,40 @@ h1 {
   font-weight: 600;
 }
 
+.version-panel {
+  background: #ffffff;
+  border-radius: 14px;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.06);
+  padding: 18px 20px;
+  margin-bottom: 24px;
+}
+
+.version-panel h2 {
+  margin: 0 0 12px;
+  font-size: 1rem;
+  color: #1f2937;
+}
+
+.version-list {
+  display: grid;
+  gap: 8px;
+}
+
+.version-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: #f8fafc;
+  color: #334155;
+}
+
+.version-item strong {
+  color: #2563eb;
+}
+
 .summary {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
