@@ -6,9 +6,9 @@ const state = {
 };
 
 const FILE_VERSIONS = {
-  'index.html': '2026.07.27.2',
-  'styles.css': '2026.07.27.2',
-  'app.js': '2026.07.27.3',
+  'index.html': '2026.07.27.3',
+  'styles.css': '2026.07.27.3',
+  'app.js': '2026.07.27.5',
   'Movimentacoes.csv': '2026.07.27.2',
 };
 
@@ -194,6 +194,41 @@ async function loadQuotes() {
   }
 }
 
+const ASSET_CATEGORIES = {
+  acoes: 'Ações',
+  fiis: 'FIIs',
+  etfs: 'ETFs',
+  stocks: 'Stocks',
+  reits: 'REITs',
+};
+
+const KNOWN_ETFS = new Set(['IVVB11', 'BOVA11', 'SMAL11', 'BOVV11', 'SPXI11', 'NASD11', 'HASH11', 'DIVO11', 'FIND11', 'GOLD11', 'PIBB11']);
+
+const KNOWN_REITS = new Set([
+  'ADC', 'AMT', 'DLR', 'EGP', 'ELS', 'ESS', 'EXR', 'FRT', 'LTC', 'NNN', 'O', 'PLD', 'PSA', 'STAG', 'WPC',
+  'AVB', 'EQR', 'SPG', 'VTR', 'WELL', 'ARE', 'BXP', 'KIM', 'REG', 'UDR', 'MAA', 'CPT', 'HST', 'IRM', 'SBAC', 'CCI',
+]);
+
+function classifyAsset(ticker) {
+  const symbol = String(ticker || '').trim().toUpperCase();
+  if (!symbol) return 'acoes';
+
+  if (symbol.endsWith('11')) {
+    return KNOWN_ETFS.has(symbol) ? 'etfs' : 'fiis';
+  }
+
+  const isBrazilianTicker = /^[A-Z0-9]{4,6}[3-8]$/.test(symbol) && /[A-Z]/.test(symbol);
+  if (isBrazilianTicker) {
+    return 'acoes';
+  }
+
+  if (KNOWN_REITS.has(symbol)) {
+    return 'reits';
+  }
+
+  return 'stocks';
+}
+
 function renderSummaryByAsset(rows) {
   const summary = new Map();
 
@@ -216,27 +251,59 @@ function renderSummaryByAsset(rows) {
     }
   });
 
-  const tbody = document.querySelector('#summaryBody');
+  const container = document.querySelector('#summaryGroups');
   const entries = Array.from(summary.entries()).sort((a, b) => a[0].localeCompare(b[0]));
 
   if (!entries.length) {
-    tbody.innerHTML = '<tr><td colspan="4">Nenhum resumo disponível.</td></tr>';
+    container.innerHTML = '<p>Nenhum resumo disponível.</p>';
     return;
   }
 
-  tbody.innerHTML = entries
-    .map(([ativo, quantidade]) => {
-      const quote = state.quotes.get(String(ativo).trim().toUpperCase());
-      const formattedQuote = quote != null ? formatCurrency(quote) : 'Sem cotação';
-      const formattedValue = quote != null ? formatCurrency(quote * quantidade) : 'Sem cotação';
+  const grouped = new Map(Object.keys(ASSET_CATEGORIES).map((key) => [key, []]));
+
+  entries.forEach(([ativo, quantidade]) => {
+    const category = classifyAsset(ativo);
+    grouped.get(category).push([ativo, quantidade]);
+  });
+
+  container.innerHTML = Object.entries(ASSET_CATEGORIES)
+    .map(([key, label]) => {
+      const items = grouped.get(key) || [];
+
+      const rowsHtml = items.length
+        ? items
+            .map(([ativo, quantidade]) => {
+              const quote = state.quotes.get(String(ativo).trim().toUpperCase());
+              const formattedQuote = quote != null ? formatCurrency(quote) : 'Sem cotação';
+              const formattedValue = quote != null ? formatCurrency(quote * quantidade) : 'Sem cotação';
+
+              return `
+                <tr>
+                  <td>${ativo}</td>
+                  <td>${quantidade}</td>
+                  <td>${formattedQuote}</td>
+                  <td>${formattedValue}</td>
+                </tr>
+              `;
+            })
+            .join('')
+        : '<tr><td colspan="4">Nenhum ativo nesta categoria.</td></tr>';
 
       return `
-        <tr>
-          <td>${ativo}</td>
-          <td>${quantidade}</td>
-          <td>${formattedQuote}</td>
-          <td>${formattedValue}</td>
-        </tr>
+        <div class="asset-group">
+          <h3>${label} (${items.length})</h3>
+          <table>
+            <thead>
+              <tr>
+                <th>Ativo</th>
+                <th>Quantidade</th>
+                <th>Cotação</th>
+                <th>Valor atual</th>
+              </tr>
+            </thead>
+            <tbody>${rowsHtml}</tbody>
+          </table>
+        </div>
       `;
     })
     .join('');
@@ -244,7 +311,7 @@ function renderSummaryByAsset(rows) {
 
 function switchView(view) {
   const movementsTable = document.querySelector('#movementsTable');
-  const summaryTable = document.querySelector('#summaryTable');
+  const summaryGroups = document.querySelector('#summaryGroups');
   const buttons = document.querySelectorAll('.view-btn');
 
   buttons.forEach((button) => {
@@ -253,10 +320,10 @@ function switchView(view) {
 
   if (view === 'summary') {
     movementsTable.hidden = true;
-    summaryTable.hidden = false;
+    summaryGroups.hidden = false;
   } else {
     movementsTable.hidden = false;
-    summaryTable.hidden = true;
+    summaryGroups.hidden = true;
   }
 }
 
@@ -294,7 +361,10 @@ async function loadMovements() {
       throw new Error('Conteúdo inválido recebido para as movimentações.');
     }
 
-    const movements = parseCsv(text);
+    const movements = parseCsv(text).filter((row) => {
+      const ativo = getRowValue(row, 'Ativo').trim();
+      return ativo && ativo !== '-';
+    });
     state.movements = movements;
     state.lastContent = text;
     renderSummary(movements);
