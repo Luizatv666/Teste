@@ -102,18 +102,38 @@ function getQuote(symbol) {
   if (!normalizedSymbol) return Promise.resolve(null);
 
   const query = normalizedSymbol.replace(/\.SA$/, '');
-  const url = `https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol=${query}.SA&apikey=demo`;
+  const endpoints = [
+    `https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol=${query}.SA&apikey=demo`,
+    `https://query1.finance.yahoo.com/v8/finance/chart/${query}`,
+    `https://brapi.dev/api/quote/${query}?range=1d&interval=1d`,
+  ];
 
-  return fetch(url)
-    .then((response) => {
-      if (!response.ok) return null;
-      return response.json();
-    })
-    .then((payload) => {
-      const quote = payload?.['Global Quote']?.['05. price'];
-      return quote ? Number(quote) : null;
-    })
-    .catch(() => null);
+  return Promise.all(
+    endpoints.map((url) =>
+      fetch(url)
+        .then((response) => {
+          if (!response.ok) return null;
+          return response.json();
+        })
+        .then((payload) => {
+          const quote = payload?.['Global Quote']?.['05. price'];
+          if (quote) return Number(quote);
+
+          const result = payload?.chart?.result?.[0];
+          if (result?.meta?.regularMarketPrice) {
+            return Number(result.meta.regularMarketPrice);
+          }
+
+          const stock = payload?.results?.[0];
+          if (stock?.regularMarketPrice) {
+            return Number(stock.regularMarketPrice);
+          }
+
+          return null;
+        })
+        .catch(() => null),
+    ),
+  ).then((values) => values.find((value) => value != null) ?? null);
 }
 
 async function renderSummaryByAsset(rows) {
@@ -149,8 +169,8 @@ async function renderSummaryByAsset(rows) {
   const rowsHtml = await Promise.all(
     entries.map(async ([ativo, quantidade]) => {
       const quote = await getQuote(ativo);
-      const formattedQuote = quote != null ? formatCurrency(quote) : '—';
-      const formattedValue = quote != null ? formatCurrency(quote * quantidade) : '—';
+      const formattedQuote = quote != null ? formatCurrency(quote) : 'Indisponível';
+      const formattedValue = quote != null ? formatCurrency(quote * quantidade) : 'Indisponível';
 
       return `
         <tr>
