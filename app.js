@@ -6,9 +6,9 @@ const state = {
 };
 
 const FILE_VERSIONS = {
-  'index.html': '2026.07.27.3',
-  'styles.css': '2026.07.27.3',
-  'app.js': '2026.07.27.6',
+  'index.html': '2026.07.27.4',
+  'styles.css': '2026.07.27.5',
+  'app.js': '2026.07.27.9',
   'Movimentacoes.csv': '2026.07.27.2',
 };
 
@@ -23,6 +23,17 @@ function parseCurrency(value) {
     .replace(/[R$\s]/g, '')
     .replace(/\./g, '')
     .replace(',', '.');
+  return Number(normalized) || 0;
+}
+
+function parseNumber(value) {
+  if (value === null || value === undefined || value === '') return 0;
+
+  const normalized = String(value)
+    .replace(/\s/g, '')
+    .replace(/\./g, '')
+    .replace(',', '.');
+
   return Number(normalized) || 0;
 }
 
@@ -243,7 +254,7 @@ function renderSummaryByAsset(rows) {
     const movimentacao = String(
       getRowValue(row, 'Movimentação') || getRowValue(row, 'Movimentaçao') || getRowValue(row, 'Movimentacao') || '',
     ).trim().toLowerCase();
-    const quantidade = Number(getRowValue(row, 'Quantidade')) || 0;
+    const quantidade = getRowValue(row, 'Quantidade');
 
     if (!ativo) return;
 
@@ -253,7 +264,7 @@ function renderSummaryByAsset(rows) {
 
     const tiposPermitidos = ['compra', 'desdobramento', 'bonificação'];
     if (tiposPermitidos.includes(movimentacao)) {
-      summary.set(ativo, summary.get(ativo) + quantidade);
+      summary.set(ativo, summary.get(ativo) + parseNumber(quantidade));
     }
   });
 
@@ -272,16 +283,22 @@ function renderSummaryByAsset(rows) {
     grouped.get(category).push([ativo, quantidade]);
   });
 
+  let patrimonioTotal = 0;
+
   container.innerHTML = Object.entries(ASSET_CATEGORIES)
     .map(([key, label]) => {
       const items = grouped.get(key) || [];
+      let totalCategoria = 0;
 
       const rowsHtml = items.length
         ? items
             .map(([ativo, quantidade]) => {
               const quote = state.quotes.get(String(ativo).trim().toUpperCase());
+              const valor = quote != null ? quote * quantidade : 0;
+              totalCategoria += valor;
+
               const formattedQuote = quote != null ? formatCurrency(quote) : 'Sem cotação';
-              const formattedValue = quote != null ? formatCurrency(quote * quantidade) : 'Sem cotação';
+              const formattedValue = quote != null ? formatCurrency(valor) : 'Sem cotação';
 
               return `
                 <tr>
@@ -295,9 +312,12 @@ function renderSummaryByAsset(rows) {
             .join('')
         : '<tr><td colspan="4">Nenhum ativo nesta categoria.</td></tr>';
 
+      patrimonioTotal += totalCategoria;
+
       return `
         <div class="asset-group">
           <h3>${label} (${items.length})</h3>
+          <div class="asset-group-total">Patrimônio: <strong>${formatCurrency(totalCategoria)}</strong></div>
           <table>
             <thead>
               <tr>
@@ -313,6 +333,11 @@ function renderSummaryByAsset(rows) {
       `;
     })
     .join('');
+
+  const patrimonioTotalEl = document.querySelector('#patrimonioTotal');
+  if (patrimonioTotalEl) {
+    patrimonioTotalEl.textContent = formatCurrency(patrimonioTotal);
+  }
 }
 
 function switchView(view) {
