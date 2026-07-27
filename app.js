@@ -6,21 +6,16 @@ const state = {
 };
 
 const FILE_VERSIONS = {
-  'index.html': '2026.07.27.2',
-  'styles.css': '2026.07.27.2',
-  'app.js': '2026.07.27.2',
-  'Movimentacoes.csv': '2026.07.27.2',
+  'index.html': '2026.07.27.3',
+  'styles.css': '2026.07.27.3',
+  'app.js': '2026.07.27.3',
+  'Movimentacoes.csv': '2026.07.27.3',
 };
-
-const SHEET_URLS = [
-  'https://docs.google.com/spreadsheets/d/16W7sG6d_QUrYneuxVdh39DDwoTInAQi0qCuAaEMBShA/export?format=csv&gid=1908759892',
-  'https://docs.google.com/spreadsheets/d/16W7sG6d_QUrYneuxVdh39DDwoTInAQi0qCuAaEMBShA/gviz/tq?tqx=out:csv&gid=1908759892',
-];
 
 const QUOTES_URL =
   'https://docs.google.com/spreadsheets/d/16W7sG6d_QUrYneuxVdh39DDwoTInAQi0qCuAaEMBShA/export?format=csv';
 
-const FALLBACK_URL = './Movimentacoes.csv';
+const MOVEMENTS_URL = './Movimentacoes.csv';
 
 function parseCurrency(value) {
   if (!value) return 0;
@@ -285,46 +280,33 @@ async function loadMovements() {
   try {
     await loadQuotes();
 
-    const sources = [...SHEET_URLS, FALLBACK_URL];
+    const response = await fetch(`${MOVEMENTS_URL}?ts=${Date.now()}`, {
+      cache: 'no-store',
+    });
 
-    for (const source of sources) {
-      try {
-        const response = await fetch(`${source}${source.includes('?') ? '&' : '?'}ts=${Date.now()}`, {
-          cache: 'no-store',
-        });
-
-        if (!response.ok) {
-          continue;
-        }
-
-        const text = await response.text();
-
-        if (!text || text.includes('<!DOCTYPE') || text.includes('<html')) {
-          continue;
-        }
-
-        const movements = parseCsv(text);
-        state.movements = movements;
-        renderSummary(movements);
-        renderTable(movements);
-        renderSummaryByAsset(movements);
-
-        if (text !== state.lastContent) {
-          state.lastContent = text;
-        }
-
-        setLastUpdated();
-        return;
-      } catch (error) {
-        continue;
-      }
+    if (!response.ok) {
+      throw new Error(`Falha ao buscar ${MOVEMENTS_URL}: ${response.status}`);
     }
 
+    const text = await response.text();
+
+    if (!text || text.includes('<!DOCTYPE') || text.includes('<html')) {
+      throw new Error('Conteúdo inválido recebido para as movimentações.');
+    }
+
+    const movements = parseCsv(text);
+    state.movements = movements;
+    state.lastContent = text;
+    renderSummary(movements);
+    renderTable(movements);
+    renderSummaryByAsset(movements);
+    setLastUpdated();
+  } catch (error) {
     const tbody = document.querySelector('#movementsBody');
-    if (tbody && tbody.innerHTML.includes('Carregando')) {
+    if (tbody) {
       tbody.innerHTML = `
         <tr>
-          <td colspan="5">Não foi possível carregar os dados da planilha. Verifique se a planilha está compartilhada publicamente para visualização.</td>
+          <td colspan="5">${getErrorMessage(error)}</td>
         </tr>
       `;
     }
