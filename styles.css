@@ -53,6 +53,27 @@ h1 {
   margin-bottom: 24px;
 }
 
+.toolbar {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.view-btn {
+  border: none;
+  border-radius: 999px;
+  padding: 10px 16px;
+  background: #e2e8f0;
+  color: #334155;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.view-btn.active {
+  background: #2563eb;
+  color: #ffffff;
+}
+
 .card,
 .table-card {
   background: #ffffff;
@@ -83,6 +104,10 @@ h1 {
 table {
   width: 100%;
   border-collapse: collapse;
+}
+
+[hidden] {
+  display: none !important;
 }
 
 thead {
