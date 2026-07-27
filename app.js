@@ -102,17 +102,16 @@ function getQuote(symbol) {
   if (!normalizedSymbol) return Promise.resolve(null);
 
   const query = normalizedSymbol.replace(/\.SA$/, '');
-  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${query}`;
+  const url = `https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol=${query}.SA&apikey=demo`;
 
-  return fetch(url, { mode: 'cors' })
+  return fetch(url)
     .then((response) => {
       if (!response.ok) return null;
       return response.json();
     })
     .then((payload) => {
-      const result = payload?.chart?.result?.[0];
-      const quote = result?.meta?.regularMarketPrice;
-      return typeof quote === 'number' ? quote : null;
+      const quote = payload?.['Global Quote']?.['05. price'];
+      return quote ? Number(quote) : null;
     })
     .catch(() => null);
 }
