@@ -3,6 +3,13 @@ const state = {
   lastContent: '',
 };
 
+const FILE_VERSIONS = {
+  'index.html': '2026.07.27.1',
+  'styles.css': '2026.07.27.1',
+  'app.js': '2026.07.27.1',
+  'Movimentacoes.csv': '2026.07.27.1',
+};
+
 const SHEET_URLS = [
   'https://docs.google.com/spreadsheets/d/16W7sG6d_QUrYneuxVdh39DDwoTInAQi0qCuAaEMBShA/export?format=csv&gid=1908759892',
   'https://docs.google.com/spreadsheets/d/16W7sG6d_QUrYneuxVdh39DDwoTInAQi0qCuAaEMBShA/export?format=csv',
@@ -85,6 +92,22 @@ function formatCurrency(value) {
     style: 'currency',
     currency: 'BRL',
   }).format(value);
+}
+
+function renderFileVersions() {
+  const container = document.querySelector('#versionList');
+  if (!container) return;
+
+  container.innerHTML = Object.entries(FILE_VERSIONS)
+    .map(
+      ([fileName, version]) => `
+        <div class="version-item">
+          <span>${fileName}</span>
+          <strong>${version}</strong>
+        </div>
+      `,
+    )
+    .join('');
 }
 
 function getRowValue(row, key) {
@@ -299,11 +322,14 @@ async function loadMovements() {
     }
   }
 
-  document.querySelector('#movementsBody').innerHTML = `
-    <tr>
-      <td colspan="5">Não foi possível carregar os dados da planilha. Verifique se a planilha está compartilhada publicamente para visualização.</td>
-    </tr>
-  `;
+  const tbody = document.querySelector('#movementsBody');
+  if (tbody && tbody.innerHTML.includes('Carregando')) {
+    tbody.innerHTML = `
+      <tr>
+        <td colspan="5">Não foi possível carregar os dados da planilha. Verifique se a planilha está compartilhada publicamente para visualização.</td>
+      </tr>
+    `;
+  }
 }
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -311,6 +337,7 @@ document.addEventListener('DOMContentLoaded', () => {
     button.addEventListener('click', () => switchView(button.dataset.view));
   });
 
+  renderFileVersions();
   switchView('movements');
   loadMovements();
   setInterval(loadMovements, 1000);
