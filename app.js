@@ -97,6 +97,66 @@ function renderTable(rows) {
     .join('');
 }
 
+function renderSummaryByAsset(rows) {
+  const summary = new Map();
+
+  rows.forEach((row) => {
+    const ativo = getRowValue(row, 'Ativo');
+    const movimentacao = String(
+      getRowValue(row, 'Movimentação') || getRowValue(row, 'Movimentaçao') || getRowValue(row, 'Movimentacao') || '',
+    ).trim().toLowerCase();
+    const quantidade = Number(getRowValue(row, 'Quantidade')) || 0;
+
+    if (!ativo) return;
+
+    if (!summary.has(ativo)) {
+      summary.set(ativo, 0);
+    }
+
+    const tiposPermitidos = ['compra', 'desdobramento', 'bonificação'];
+    if (tiposPermitidos.includes(movimentacao)) {
+      summary.set(ativo, summary.get(ativo) + quantidade);
+    }
+  });
+
+  const tbody = document.querySelector('#summaryBody');
+  const entries = Array.from(summary.entries()).sort((a, b) => a[0].localeCompare(b[0]));
+
+  if (!entries.length) {
+    tbody.innerHTML = '<tr><td colspan="2">Nenhum resumo disponível.</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = entries
+    .map(
+      ([ativo, quantidade]) => `
+        <tr>
+          <td>${ativo}</td>
+          <td>${quantidade}</td>
+        </tr>
+      `,
+    )
+    .join('');
+}
+
+function switchView(view) {
+  const movementsTable = document.querySelector('#movementsTable');
+  const summaryTable = document.querySelector('#summaryTable');
+  const buttons = document.querySelectorAll('.view-btn');
+
+  buttons.forEach((button) => {
+    button.classList.toggle('active', button.dataset.view === view);
+  });
+
+  if (view === 'summary') {
+    movementsTable.hidden = true;
+    summaryTable.hidden = false;
+  } else {
+    movementsTable.hidden = false;
+    summaryTable.hidden = true;
+  }
+}
+
 function setLastUpdated() {
   const now = new Date();
   document.querySelector('#lastUpdated').textContent = `Atualizado às ${now.toLocaleTimeString('pt-BR')}`;
@@ -131,6 +191,7 @@ async function loadMovements() {
     state.movements = movements;
     renderSummary(movements);
     renderTable(movements);
+    renderSummaryByAsset(movements);
     setLastUpdated();
   } catch (error) {
     document.querySelector('#movementsBody').innerHTML = `
@@ -142,6 +203,11 @@ async function loadMovements() {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
+  document.querySelectorAll('.view-btn').forEach((button) => {
+    button.addEventListener('click', () => switchView(button.dataset.view));
+  });
+
+  switchView('movements');
   loadMovements();
   setInterval(loadMovements, 3000);
 });
