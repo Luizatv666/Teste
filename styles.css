@@ -135,6 +135,28 @@ h1 {
   overflow: hidden;
 }
 
+.summary-groups {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 16px;
+}
+
+.asset-group {
+  background: #ffffff;
+  border-radius: 14px;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.06);
+  overflow: hidden;
+}
+
+.asset-group h3 {
+  margin: 0;
+  padding: 14px 16px;
+  background: #eff6ff;
+  color: #1d4ed8;
+  font-size: 1rem;
+  border-bottom: 1px solid #e5e7eb;
+}
+
 table {
   width: 100%;
   border-collapse: collapse;
