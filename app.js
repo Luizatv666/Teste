@@ -3,6 +3,14 @@ const state = {
   lastContent: '',
 };
 
+const SHEET_URLS = [
+  'https://docs.google.com/spreadsheets/d/16W7sG6d_QUrYneuxVdh39DDwoTInAQi0qCuAaEMBShA/export?format=csv&gid=1908759892',
+  'https://docs.google.com/spreadsheets/d/16W7sG6d_QUrYneuxVdh39DDwoTInAQi0qCuAaEMBShA/export?format=csv',
+  'https://docs.google.com/spreadsheets/d/16W7sG6d_QUrYneuxVdh39DDwoTInAQi0qCuAaEMBShA/gviz/tq?tqx=out:csv&gid=1908759892',
+];
+
+const FALLBACK_URL = './Movimentacoes.csv';
+
 function parseCurrency(value) {
   if (!value) return 0;
   const normalized = String(value)
@@ -19,20 +27,47 @@ function normalizeHeader(value) {
     .toLowerCase();
 }
 
+function splitDelimitedLine(line, delimiter) {
+  const values = [];
+  let current = '';
+  let inQuotes = false;
+
+  for (let index = 0; index < line.length; index += 1) {
+    const char = line[index];
+
+    if (char === '"') {
+      if (inQuotes && line[index + 1] === '"') {
+        current += '"';
+        index += 1;
+      } else {
+        inQuotes = !inQuotes;
+      }
+    } else if (char === delimiter && !inQuotes) {
+      values.push(current.trim());
+      current = '';
+    } else {
+      current += char;
+    }
+  }
+
+  values.push(current.trim());
+  return values;
+}
+
 function parseCsv(text) {
   const lines = text
-    .trim()
-    .split(/\r?\n/)
-    .filter(Boolean);
+    .replace(/\r/g, '')
+    .split('\n')
+    .filter((line) => line.trim());
 
   if (lines.length < 2) return [];
 
-  const headers = lines[0]
-    .split('\t')
-    .map((header) => header.trim());
+  const hasTab = lines.some((line) => line.includes('\t'));
+  const delimiter = hasTab ? '\t' : ',';
+  const headers = splitDelimitedLine(lines[0], delimiter).map((header) => header.trim());
 
   return lines.slice(1).map((line) => {
-    const values = line.split('\t');
+    const values = splitDelimitedLine(line, delimiter);
     const entry = {};
 
     headers.forEach((header, index) => {
@@ -102,29 +137,49 @@ function getQuote(symbol) {
   if (!normalizedSymbol) return Promise.resolve(null);
 
   const query = normalizedSymbol.replace(/\.SA$/, '').replace(/[^A-Z0-9]/g, '');
-  const candidates = [
-    query,
-    `${query}.SA`,
-    `BVMF:${query}`,
-    `${query}:BVMF`,
-  ];
+  const candidates = [query, `${query}.SA`, `BVMF:${query}`, `${query}:BVMF`];
 
-  return Promise.all(
-    candidates.map((candidate) => {
-      const formula = `=GOOGLEFINANCE("${candidate}";"price")`;
-      return fetch(`https://script.google.com/macros/s/AKfycbw5Xx8b4bI6yU0cJkQJ3mNtmVZ-PxX4Y8M0YQx2tEjL3nD4N1g7mQ7gD2M4U1/exec?formula=${encodeURIComponent(formula)}`)
-        .then((response) => {
-          if (!response.ok) return null;
-          return response.text();
-        })
-        .then((text) => {
-          const cleaned = String(text || '').trim();
-          const number = Number(cleaned.replace(',', '.').replace(/[^0-9.-]/g, ''));
-          return Number.isFinite(number) ? number : null;
-        })
-        .catch(() => null);
-    }),
-  ).then((values) => values.find((value) => value != null) ?? null);
+  return new Promise((resolve) => {
+    let finished = false;
+    const timeoutId = setTimeout(() => {
+      if (!finished) {
+        finished = true;
+        resolve(null);
+      }
+    }, 5000);
+
+    Promise.all(
+      candidates.map((candidate) => {
+        const formula = `=GOOGLEFINANCE("${candidate}";"price")`;
+        return fetch(`https://script.google.com/macros/s/AKfycbw5Xx8b4bI6yU0cJkQJ3mNtmVZ-PxX4Y8M0YQx2tEjL3nD4N1g7mQ7gD2M4U1/exec?formula=${encodeURIComponent(formula)}`)
+          .then((response) => {
+            if (!response.ok) return null;
+            return response.text();
+          })
+          .then((text) => {
+            const cleaned = String(text || '').trim();
+            const number = Number(cleaned.replace(',', '.').replace(/[^0-9.-]/g, ''));
+            return Number.isFinite(number) ? number : null;
+          })
+          .catch(() => null);
+      }),
+    )
+      .then((values) => {
+        const quote = values.find((value) => value != null) ?? null;
+        if (!finished) {
+          finished = true;
+          clearTimeout(timeoutId);
+          resolve(quote);
+        }
+      })
+      .catch(() => {
+        if (!finished) {
+          finished = true;
+          clearTimeout(timeoutId);
+          resolve(null);
+        }
+      });
+  });
 }
 
 async function renderSummaryByAsset(rows) {
@@ -160,8 +215,8 @@ async function renderSummaryByAsset(rows) {
   const rowsHtml = await Promise.all(
     entries.map(async ([ativo, quantidade]) => {
       const quote = await getQuote(ativo);
-      const formattedQuote = quote != null ? formatCurrency(quote) : 'Carregando...';
-      const formattedValue = quote != null ? formatCurrency(quote * quantidade) : 'Carregando...';
+      const formattedQuote = quote != null ? formatCurrency(quote) : 'Sem cotação';
+      const formattedValue = quote != null ? formatCurrency(quote * quantidade) : 'Sem cotação';
 
       return `
         <tr>
@@ -209,35 +264,46 @@ function getErrorMessage(error) {
 }
 
 async function loadMovements() {
-  try {
-    const response = await fetch(`./Movimentacoes.csv?ts=${Date.now()}`, {
-      cache: 'no-store',
-    });
+  const sources = [...SHEET_URLS, FALLBACK_URL];
 
-    if (!response.ok) {
-      throw new Error('Não foi possível carregar o arquivo de movimentações.');
-    }
+  for (const source of sources) {
+    try {
+      const response = await fetch(`${source}?ts=${Date.now()}`, {
+        cache: 'no-store',
+      });
 
-    const text = await response.text();
+      if (!response.ok) {
+        continue;
+      }
 
-    if (text === state.lastContent) {
+      const text = await response.text();
+
+      if (!text || text.includes('<!DOCTYPE') || text.includes('<html')) {
+        continue;
+      }
+
+      if (text === state.lastContent) {
+        return;
+      }
+
+      state.lastContent = text;
+      const movements = parseCsv(text);
+      state.movements = movements;
+      renderSummary(movements);
+      renderTable(movements);
+      renderSummaryByAsset(movements);
+      setLastUpdated();
       return;
+    } catch (error) {
+      continue;
     }
-
-    state.lastContent = text;
-    const movements = parseCsv(text);
-    state.movements = movements;
-    renderSummary(movements);
-    renderTable(movements);
-    renderSummaryByAsset(movements);
-    setLastUpdated();
-  } catch (error) {
-    document.querySelector('#movementsBody').innerHTML = `
-      <tr>
-        <td colspan="5">${getErrorMessage(error)}</td>
-      </tr>
-    `;
   }
+
+  document.querySelector('#movementsBody').innerHTML = `
+    <tr>
+      <td colspan="5">Não foi possível carregar os dados da planilha. Verifique se a planilha está compartilhada publicamente para visualização.</td>
+    </tr>
+  `;
 }
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -247,5 +313,5 @@ document.addEventListener('DOMContentLoaded', () => {
 
   switchView('movements');
   loadMovements();
-  setInterval(loadMovements, 3000);
+  setInterval(loadMovements, 1000);
 });
