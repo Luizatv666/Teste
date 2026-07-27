@@ -6,10 +6,10 @@ const state = {
 };
 
 const FILE_VERSIONS = {
-  'index.html': '2026.07.27.3',
-  'styles.css': '2026.07.27.3',
+  'index.html': '2026.07.27.2',
+  'styles.css': '2026.07.27.2',
   'app.js': '2026.07.27.3',
-  'Movimentacoes.csv': '2026.07.27.3',
+  'Movimentacoes.csv': '2026.07.27.2',
 };
 
 const QUOTES_URL =
