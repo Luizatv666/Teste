@@ -97,7 +97,27 @@ function renderTable(rows) {
     .join('');
 }
 
-function renderSummaryByAsset(rows) {
+function getQuote(symbol) {
+  const normalizedSymbol = String(symbol || '').trim().toUpperCase();
+  if (!normalizedSymbol) return Promise.resolve(null);
+
+  const query = normalizedSymbol.replace(/\.SA$/, '');
+  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${query}`;
+
+  return fetch(url, { mode: 'cors' })
+    .then((response) => {
+      if (!response.ok) return null;
+      return response.json();
+    })
+    .then((payload) => {
+      const result = payload?.chart?.result?.[0];
+      const quote = result?.meta?.regularMarketPrice;
+      return typeof quote === 'number' ? quote : null;
+    })
+    .catch(() => null);
+}
+
+async function renderSummaryByAsset(rows) {
   const summary = new Map();
 
   rows.forEach((row) => {
@@ -123,20 +143,28 @@ function renderSummaryByAsset(rows) {
   const entries = Array.from(summary.entries()).sort((a, b) => a[0].localeCompare(b[0]));
 
   if (!entries.length) {
-    tbody.innerHTML = '<tr><td colspan="2">Nenhum resumo disponível.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="4">Nenhum resumo disponível.</td></tr>';
     return;
   }
 
-  tbody.innerHTML = entries
-    .map(
-      ([ativo, quantidade]) => `
+  const rowsHtml = await Promise.all(
+    entries.map(async ([ativo, quantidade]) => {
+      const quote = await getQuote(ativo);
+      const formattedQuote = quote != null ? formatCurrency(quote) : '—';
+      const formattedValue = quote != null ? formatCurrency(quote * quantidade) : '—';
+
+      return `
         <tr>
           <td>${ativo}</td>
           <td>${quantidade}</td>
+          <td>${formattedQuote}</td>
+          <td>${formattedValue}</td>
         </tr>
-      `,
-    )
-    .join('');
+      `;
+    }),
+  );
+
+  tbody.innerHTML = rowsHtml.join('');
 }
 
 function switchView(view) {
