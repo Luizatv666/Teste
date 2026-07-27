@@ -101,20 +101,30 @@ function getQuote(symbol) {
   const normalizedSymbol = String(symbol || '').trim().toUpperCase();
   if (!normalizedSymbol) return Promise.resolve(null);
 
-  const query = normalizedSymbol.replace(/\.SA$/, '');
-  const formula = `=GOOGLEFINANCE("BVMF:${query}";"price")`;
+  const query = normalizedSymbol.replace(/\.SA$/, '').replace(/[^A-Z0-9]/g, '');
+  const candidates = [
+    query,
+    `${query}.SA`,
+    `BVMF:${query}`,
+    `${query}:BVMF`,
+  ];
 
-  return fetch(`https://script.google.com/macros/s/AKfycbw5Xx8b4bI6yU0cJkQJ3mNtmVZ-PxX4Y8M0YQx2tEjL3nD4N1g7mQ7gD2M4U1/exec?formula=${encodeURIComponent(formula)}`)
-    .then((response) => {
-      if (!response.ok) return null;
-      return response.text();
-    })
-    .then((text) => {
-      const cleaned = String(text || '').trim();
-      const number = Number(cleaned.replace(',', '.').replace(/[^0-9.-]/g, ''));
-      return Number.isFinite(number) ? number : null;
-    })
-    .catch(() => null);
+  return Promise.all(
+    candidates.map((candidate) => {
+      const formula = `=GOOGLEFINANCE("${candidate}";"price")`;
+      return fetch(`https://script.google.com/macros/s/AKfycbw5Xx8b4bI6yU0cJkQJ3mNtmVZ-PxX4Y8M0YQx2tEjL3nD4N1g7mQ7gD2M4U1/exec?formula=${encodeURIComponent(formula)}`)
+        .then((response) => {
+          if (!response.ok) return null;
+          return response.text();
+        })
+        .then((text) => {
+          const cleaned = String(text || '').trim();
+          const number = Number(cleaned.replace(',', '.').replace(/[^0-9.-]/g, ''));
+          return Number.isFinite(number) ? number : null;
+        })
+        .catch(() => null);
+    }),
+  ).then((values) => values.find((value) => value != null) ?? null);
 }
 
 async function renderSummaryByAsset(rows) {
